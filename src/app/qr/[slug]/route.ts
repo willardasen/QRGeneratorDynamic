@@ -10,29 +10,36 @@ export async function GET(
 ) {
   const { slug } = await params;
 
-  // Create a lightweight Supabase client for the edge
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // 1. Look up the slug
+  // Look up the slug
   const { data, error } = await supabase
     .from("qrcodes")
     .select("id, destination_url")
     .eq("slug", slug)
     .single();
 
+  // Slug not found in DB at all
   if (error || !data) {
-    return NextResponse.json(
-      { error: "QR code not found" },
-      { status: 404 }
+    return NextResponse.redirect(
+      new URL(`/not-found-qr`, request.url),
+      302
     );
   }
 
-  // 2. Increment click counter (fire-and-forget for speed)
+  // Condition B: Unassigned — show "Belum Aktif" activation page
+  if (!data.destination_url) {
+    return NextResponse.redirect(
+      new URL(`/qr-inactive/${slug}`, request.url),
+      302
+    );
+  }
+
+  // Condition A: Active — increment clicks (fire-and-forget) and redirect
   supabase.rpc("increment_clicks", { row_id: data.id }).then(() => {});
 
-  // 3. Fast 302 redirect
   return NextResponse.redirect(data.destination_url, 302);
 }
