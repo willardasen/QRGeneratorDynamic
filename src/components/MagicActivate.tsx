@@ -132,7 +132,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-surface-hover py-3 text-sm font-semibold text-foreground transition-all hover:bg-border active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="w-full rounded-xl bg-accent py-3 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {loading ? "Memverifikasi..." : "Masuk"}
           </button>
@@ -153,7 +153,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
     <div className="mt-10 flex justify-center">
       <button
         onClick={() => setStage("passcode")}
-        className="rounded-lg px-4 py-2 text-xs text-muted/40 transition-colors hover:text-muted cursor-pointer"
+        className="rounded-xl bg-accent px-6 py-2.5 text-sm font-bold text-white transition-all hover:bg-accent-hover active:scale-95 cursor-pointer shadow-lg shadow-accent/20"
       >
         Admin Login
       </button>

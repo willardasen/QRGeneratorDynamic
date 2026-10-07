@@ -22,10 +22,12 @@ export async function GET(
     .eq("slug", slug)
     .single();
 
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
   // Slug not found in DB at all
   if (error || !data) {
     return NextResponse.redirect(
-      new URL(`/not-found-qr`, request.url),
+      new URL(`/not-found-qr`, baseUrl),
       302
     );
   }
@@ -33,7 +35,7 @@ export async function GET(
   // Condition B: Unassigned — show "Belum Aktif" activation page
   if (!data.destination_url) {
     return NextResponse.redirect(
-      new URL(`/qr-inactive/${slug}`, request.url),
+      new URL(`/qr-inactive/${slug}`, baseUrl),
       302
     );
   }
