@@ -15,6 +15,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
 
   const [passcode, setPasscode] = useState("");
   const [url, setUrl] = useState("");
+  const [newSlug, setNewSlug] = useState(slug);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -46,10 +47,14 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
     setLoading(true);
     setError("");
     try {
+      const body: Record<string, string> = { destination_url: url };
+      if (newSlug && newSlug !== slug) {
+        body.new_slug = newSlug;
+      }
       const res = await fetch(`/api/activate/${slug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination_url: url }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -57,7 +62,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
         return;
       }
       setStage("done");
-      // Redirect to the now-active link after 2s
+      // Redirect to the destination URL after 2s
       setTimeout(() => router.push(url), 2000);
     } catch {
       setError("Terjadi kesalahan jaringan.");
@@ -83,16 +88,49 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
           🔗 Aktifkan QR <span className="font-mono">/{slug}</span>
         </p>
         <form onSubmit={handleActivate} className="flex flex-col gap-3" suppressHydrationWarning>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://wa.me/628123456789"
-            required
-            autoFocus
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-            suppressHydrationWarning
-          />
+
+          {/* Slug rename field */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted">
+              Nama Slug (URL pendek)
+            </label>
+            <div className="flex items-center rounded-xl border border-border bg-background overflow-hidden focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
+              <span className="pl-3 pr-1 text-sm text-muted select-none">/</span>
+              <input
+                type="text"
+                value={newSlug}
+                onChange={(e) => setNewSlug(e.target.value.replace(/[^a-zA-Z0-9-]/g, ""))}
+                placeholder="namaToko"
+                required
+                className="flex-1 bg-transparent py-3 pr-4 text-sm text-foreground placeholder:text-muted focus:outline-none"
+                suppressHydrationWarning
+              />
+            </div>
+            {newSlug !== slug && newSlug && (
+              <p className="text-xs text-accent/80">
+                Slug diubah: <span className="font-mono text-muted">/{slug}</span> →{" "}
+                <span className="font-mono text-accent">/{newSlug}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Destination URL field */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted">
+              URL Tujuan
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://wa.me/628123456789"
+              required
+              autoFocus
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+              suppressHydrationWarning
+            />
+          </div>
+
           {error && <p className="text-xs text-danger">{error}</p>}
           <button
             type="submit"
