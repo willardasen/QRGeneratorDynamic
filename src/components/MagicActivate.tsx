@@ -82,7 +82,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
         <p className="mb-4 text-sm font-semibold text-accent">
           🔗 Aktifkan QR <span className="font-mono">/{slug}</span>
         </p>
-        <form onSubmit={handleActivate} className="flex flex-col gap-3">
+        <form onSubmit={handleActivate} className="flex flex-col gap-3" suppressHydrationWarning>
           <input
             type="url"
             value={url}
@@ -91,6 +91,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
             required
             autoFocus
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            suppressHydrationWarning
           />
           {error && <p className="text-xs text-danger">{error}</p>}
           <button
@@ -118,7 +119,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
         <p className="mb-4 text-sm font-semibold text-muted">
           🔐 Masukkan kode admin
         </p>
-        <form onSubmit={handlePasscode} className="flex flex-col gap-3">
+        <form onSubmit={handlePasscode} className="flex flex-col gap-3" suppressHydrationWarning>
           <input
             type="password"
             value={passcode}
@@ -127,6 +128,7 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
             required
             autoFocus
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            suppressHydrationWarning
           />
           {error && <p className="text-xs text-danger">{error}</p>}
           <button

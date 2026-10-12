@@ -22,6 +22,7 @@ export default function QRLinkList({
   const [saving, setSaving] = useState(false);
   const [qrModalSlug, setQrModalSlug] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; slug: string } | null>(null);
   const [filter, setFilter] = useState<"all" | "active" | "unassigned">("all");
   const [search, setSearch] = useState("");
 
@@ -74,8 +75,12 @@ export default function QRLinkList({
     }
   };
 
-  const handleDelete = async (id: string, slug: string) => {
-    if (!confirm(`Delete QR code "${slug}"? This cannot be undone.`)) return;
+  const handleDelete = (id: string, slug: string) => {
+    setConfirmDelete({ id, slug });
+  };
+
+  const executeDelete = async (id: string, slug: string) => {
+    setConfirmDelete(null);
     setDeletingId(id);
     try {
       const res = await fetch(`/api/qrcodes/${id}`, { method: "DELETE" });
@@ -295,6 +300,37 @@ export default function QRLinkList({
             {/* Bottom handle for mobile */}
             <div className="mt-4 flex justify-center sm:hidden">
               <div className="h-1 w-10 rounded-full bg-border" />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            className="animate-fade-in relative w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-lg font-bold text-foreground">Hapus QR Code?</h3>
+            <p className="mb-6 text-sm text-muted">
+              Apakah Anda yakin ingin menghapus QR code <span className="font-mono font-bold text-foreground">#{confirmDelete.slug}</span>? Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-hover cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => executeDelete(confirmDelete.id, confirmDelete.slug)}
+                className="rounded-lg bg-danger px-4 py-2 text-sm font-bold text-white shadow-lg shadow-danger/20 transition-all hover:bg-danger/80 active:scale-95 cursor-pointer"
+              >
+                Hapus
+              </button>
             </div>
           </div>
         </div>
