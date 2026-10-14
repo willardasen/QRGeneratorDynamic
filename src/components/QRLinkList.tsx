@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { QRCode } from "@/lib/supabase";
 import QRCodeDownloader from "./QRCodeDownloader";
+import type { QRMode } from "./QRZipDownload";
 
 interface QRLinkListProps {
   items: QRCode[];
@@ -23,8 +24,14 @@ export default function QRLinkList({
   const [qrModalSlug, setQrModalSlug] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; slug: string } | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "unassigned">("all");
   const [search, setSearch] = useState("");
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [downloadMode, setDownloadMode] = useState<QRMode>("light");
 
   const filtered = items.filter((item) => {
     const matchFilter =
@@ -39,6 +46,38 @@ export default function QRLinkList({
       (item.destination_url ?? "").toLowerCase().includes(search.toLowerCase());
     return matchFilter && matchSearch;
   });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const allFilteredIds = filtered.map((i) => i.id);
+    const allSelected = allFilteredIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectedItems = items.filter((i) => selectedIds.has(i.id));
+  const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
 
   const startEdit = (item: QRCode) => {
     setEditingId(item.id);
@@ -86,11 +125,59 @@ export default function QRLinkList({
       const res = await fetch(`/api/qrcodes/${id}`, { method: "DELETE" });
       if (!res.ok) { onToast("Failed to delete", "error"); return; }
       onToast(`"${slug}" deleted`, "success");
+      selectedIds.delete(id);
+      setSelectedIds(new Set(selectedIds));
       onUpdated();
     } catch {
       onToast("Network error", "error");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const executeBulkDelete = async () => {
+    setConfirmBulkDelete(false);
+    const toDelete = [...selectedIds];
+    let deleted = 0;
+    for (const id of toDelete) {
+      try {
+        const res = await fetch(`/api/qrcodes/${id}`, { method: "DELETE" });
+        if (res.ok) deleted++;
+      } catch { /* skip */ }
+    }
+    onToast(`${deleted} QR code${deleted !== 1 ? "s" : ""} deleted`, "success");
+    setSelectedIds(new Set());
+    onUpdated();
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedItems.length === 0) return;
+    setBulkDownloading(true);
+
+    const fgColor = downloadMode === "light" ? "#09090b" : "#ffffff";
+    const bgColor = downloadMode === "light" ? "#ffffff" : "#09090b";
+
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+
+      for (const item of selectedItems) {
+        const url = `${appUrl}/qr/${item.slug}`;
+        const png = await renderQRToPNG(url, fgColor, bgColor);
+        zip.file(`qr-${item.slug}-${downloadMode}.png`, png.split(",")[1], { base64: true });
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.download = `qrflow-selected-${downloadMode}-${Date.now()}.zip`;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      console.error("Bulk download failed:", err);
+      onToast("Download failed", "error");
+    } finally {
+      setBulkDownloading(false);
     }
   };
 
@@ -142,17 +229,51 @@ export default function QRLinkList({
         </div>
       </div>
 
+      {/* Select All checkbox */}
+      <div className="mb-2 flex items-center gap-3 px-1">
+        <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleSelectAll}
+            className="h-4 w-4 rounded border-border accent-accent cursor-pointer"
+          />
+          Select all ({filtered.length})
+        </label>
+        {selectedIds.size > 0 && (
+          <button
+            onClick={clearSelection}
+            className="text-xs text-muted underline hover:text-foreground cursor-pointer"
+          >
+            Clear ({selectedIds.size})
+          </button>
+        )}
+      </div>
+
       {/* QR items */}
       <div className="space-y-2.5">
         {filtered.map((item, index) => {
           const isActive = !!item.destination_url;
+          const isSelected = selectedIds.has(item.id);
           return (
             <div
               key={item.id}
-              className="animate-slide-up rounded-2xl border border-border bg-surface transition-all hover:border-accent/20"
+              className={`animate-slide-up rounded-2xl border transition-all hover:border-accent/20 ${
+                isSelected
+                  ? "border-accent/40 bg-accent/5"
+                  : "border-border bg-surface"
+              }`}
               style={{ animationDelay: `${Math.min(index, 10) * 50}ms` }}
             >
               <div className="flex items-center gap-3 p-4">
+                {/* Selection checkbox */}
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleSelect(item.id)}
+                  className="h-4 w-4 shrink-0 rounded border-border accent-accent cursor-pointer"
+                />
+
                 {/* Status dot */}
                 <div
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${
@@ -273,6 +394,76 @@ export default function QRLinkList({
         </div>
       )}
 
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-30 -translate-x-1/2 animate-fade-in">
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-3 shadow-2xl shadow-black/30 backdrop-blur-xl">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} selected
+            </span>
+            <div className="h-5 w-px bg-border" />
+
+            {/* Light/Dark mode toggle */}
+            <div className="flex items-center rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setDownloadMode("light")}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  downloadMode === "light"
+                    ? "bg-white text-gray-900"
+                    : "bg-transparent text-muted hover:text-foreground"
+                }`}
+                title="Light mode QR"
+              >
+                ☀️
+              </button>
+              <button
+                onClick={() => setDownloadMode("dark")}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  downloadMode === "dark"
+                    ? "bg-gray-900 text-white"
+                    : "bg-transparent text-muted hover:text-foreground"
+                }`}
+                title="Dark mode QR"
+              >
+                🌙
+              </button>
+            </div>
+
+            {/* Download selected */}
+            <button
+              onClick={handleBulkDownload}
+              disabled={bulkDownloading}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-accent-hover active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              {bulkDownloading ? (
+                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              )}
+              {bulkDownloading ? "…" : "Download"}
+            </button>
+
+            {/* Delete selected */}
+            <button
+              onClick={() => setConfirmBulkDelete(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-danger/90 px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-danger active:scale-95 cursor-pointer"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* QR Code Modal */}
       {qrModalSlug && (
         <div
@@ -304,7 +495,8 @@ export default function QRLinkList({
           </div>
         </div>
       )}
-      {/* Delete Confirmation Modal */}
+
+      {/* Delete Confirmation Modal (single) */}
       {confirmDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
@@ -335,6 +527,66 @@ export default function QRLinkList({
           </div>
         </div>
       )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {confirmBulkDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+          onClick={() => setConfirmBulkDelete(false)}
+        >
+          <div
+            className="animate-fade-in relative w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-lg font-bold text-foreground">Hapus {selectedIds.size} QR Code?</h3>
+            <p className="mb-6 text-sm text-muted">
+              Apakah Anda yakin ingin menghapus <span className="font-bold text-foreground">{selectedIds.size}</span> QR code yang dipilih? Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmBulkDelete(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-hover cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={executeBulkDelete}
+                className="rounded-lg bg-danger px-4 py-2 text-sm font-bold text-white shadow-lg shadow-danger/20 transition-all hover:bg-danger/80 active:scale-95 cursor-pointer"
+              >
+                Hapus {selectedIds.size} QR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
+}
+
+// Helper: render a QR code to PNG data URL
+async function renderQRToPNG(
+  value: string,
+  fgColor: string,
+  bgColor: string
+): Promise<string> {
+  return new Promise((resolve) => {
+    const size = 300;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, size, size);
+
+    import("qrcode").then((QRCode) => {
+      QRCode.toCanvas(canvas, value, {
+        width: size,
+        margin: 2,
+        color: { dark: fgColor, light: bgColor },
+      }).then(() => {
+        resolve(canvas.toDataURL("image/png"));
+      });
+    });
+  });
 }

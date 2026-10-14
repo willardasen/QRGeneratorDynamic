@@ -7,6 +7,7 @@ import QRLinkList from "@/components/QRLinkList";
 import Toast from "@/components/Toast";
 import BatchGenerator from "@/components/BatchGenerator";
 import QRZipDownload from "@/components/QRZipDownload";
+import type { QRMode } from "@/components/QRZipDownload";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -21,6 +22,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [tab, setTab] = useState<"create" | "batch">("create");
+  const [downloadMode, setDownloadMode] = useState<QRMode>("light");
 
   const fetchItems = useCallback(async () => {
     try {
@@ -114,7 +116,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* List header with total clicks + zip download */}
+      {/* List header with total clicks + mode toggle + zip download */}
       {items.length > 0 && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
@@ -128,7 +130,34 @@ export default function AdminPage() {
               👆 {totalClicks.toLocaleString()} total clicks
             </span>
           </div>
-          <QRZipDownload items={items} appUrl={APP_URL} />
+          <div className="flex items-center gap-2">
+            {/* Light/Dark toggle for Download All */}
+            <div className="flex items-center rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setDownloadMode("light")}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  downloadMode === "light"
+                    ? "bg-white text-gray-900"
+                    : "bg-transparent text-muted hover:text-foreground"
+                }`}
+                title="Light mode"
+              >
+                ☀️
+              </button>
+              <button
+                onClick={() => setDownloadMode("dark")}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  downloadMode === "dark"
+                    ? "bg-gray-900 text-white"
+                    : "bg-transparent text-muted hover:text-foreground"
+                }`}
+                title="Dark mode"
+              >
+                🌙
+              </button>
+            </div>
+            <QRZipDownload items={items} appUrl={APP_URL} mode={downloadMode} />
+          </div>
         </div>
       )}
 

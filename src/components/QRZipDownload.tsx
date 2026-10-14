@@ -3,13 +3,20 @@
 import { useState } from "react";
 import type { QRCode } from "@/lib/supabase";
 
+export type QRMode = "light" | "dark";
+
 interface QRZipDownloadProps {
   items: QRCode[];
   appUrl: string;
+  mode: QRMode;
+  label?: string;
 }
 
-export default function QRZipDownload({ items, appUrl }: QRZipDownloadProps) {
+export default function QRZipDownload({ items, appUrl, mode, label }: QRZipDownloadProps) {
   const [loading, setLoading] = useState(false);
+
+  const fgColor = mode === "light" ? "#09090b" : "#ffffff";
+  const bgColor = mode === "light" ? "#ffffff" : "#09090b";
 
   const handleDownloadAll = async () => {
     if (items.length === 0) return;
@@ -24,18 +31,15 @@ export default function QRZipDownload({ items, appUrl }: QRZipDownloadProps) {
 
       const zip = new JSZip();
 
-      // Render each QR to canvas and export as PNG (both light and dark)
       for (const item of items) {
         const url = `${appUrl}/qr/${item.slug}`;
-        const pngLight = await renderQRToPNG(url, "#09090b", "#ffffff");
-        const pngDark = await renderQRToPNG(url, "#ffffff", "#09090b");
-        zip.file(`qr-${item.slug}-light.png`, pngLight.split(",")[1], { base64: true });
-        zip.file(`qr-${item.slug}-dark.png`, pngDark.split(",")[1], { base64: true });
+        const png = await renderQRToPNG(url, fgColor, bgColor);
+        zip.file(`qr-${item.slug}-${mode}.png`, png.split(",")[1], { base64: true });
       }
 
       const blob = await zip.generateAsync({ type: "blob" });
       const link = document.createElement("a");
-      link.download = `qrflow-batch-${Date.now()}.zip`;
+      link.download = `qrflow-${mode}-${Date.now()}.zip`;
       link.href = URL.createObjectURL(blob);
       link.click();
       URL.revokeObjectURL(link.href);
@@ -51,7 +55,7 @@ export default function QRZipDownload({ items, appUrl }: QRZipDownloadProps) {
       onClick={handleDownloadAll}
       disabled={loading || items.length === 0}
       className="flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted transition-all hover:border-accent/50 hover:text-accent active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-      title="Download all as ZIP (light + dark)"
+      title={`Download as ZIP (${mode})`}
     >
       {loading ? (
         <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -64,7 +68,7 @@ export default function QRZipDownload({ items, appUrl }: QRZipDownloadProps) {
             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
       )}
-      {loading ? "Packing…" : `Download All (${items.length})`}
+      {loading ? "Packing…" : (label ?? `Download All (${items.length})`)}
     </button>
   );
 }
@@ -82,11 +86,9 @@ async function renderQRToPNG(
     canvas.height = size;
     const ctx = canvas.getContext("2d")!;
 
-    // Fill background
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, size, size);
 
-    // Use qrcode library to draw on canvas
     import("qrcode").then((QRCode) => {
       QRCode.toCanvas(canvas, value, {
         width: size,
