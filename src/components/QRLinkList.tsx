@@ -29,6 +29,7 @@ export default function QRLinkList({
   const [search, setSearch] = useState("");
 
   // Selection state
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [downloadMode, setDownloadMode] = useState<QRMode>("light");
@@ -75,6 +76,11 @@ export default function QRLinkList({
   };
 
   const clearSelection = () => setSelectedIds(new Set());
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
 
   const selectedItems = items.filter((i) => selectedIds.has(i.id));
   const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
@@ -229,24 +235,35 @@ export default function QRLinkList({
         </div>
       </div>
 
-      {/* Select All checkbox */}
+      {/* Select mode toggle + Select All */}
       <div className="mb-2 flex items-center gap-3 px-1">
-        <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={allFilteredSelected}
-            onChange={toggleSelectAll}
-            className="h-4 w-4 rounded border-border accent-accent cursor-pointer"
-          />
-          Select all ({filtered.length})
-        </label>
-        {selectedIds.size > 0 && (
-          <button
-            onClick={clearSelection}
-            className="text-xs text-muted underline hover:text-foreground cursor-pointer"
-          >
-            Clear ({selectedIds.size})
-          </button>
+        <button
+          onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            selectMode
+              ? "bg-accent/20 text-accent"
+              : "bg-surface text-muted hover:bg-surface-hover hover:text-foreground"
+          }`}
+        >
+          {selectMode ? "✕ Cancel" : "☑ Select"}
+        </button>
+        {selectMode && (
+          <>
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-border accent-accent cursor-pointer"
+              />
+              Select all ({filtered.length})
+            </label>
+            {selectedIds.size > 0 && (
+              <span className="text-xs text-accent font-medium">
+                {selectedIds.size} selected
+              </span>
+            )}
+          </>
         )}
       </div>
 
@@ -266,13 +283,15 @@ export default function QRLinkList({
               style={{ animationDelay: `${Math.min(index, 10) * 50}ms` }}
             >
               <div className="flex items-center gap-3 p-4">
-                {/* Selection checkbox */}
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleSelect(item.id)}
-                  className="h-4 w-4 shrink-0 rounded border-border accent-accent cursor-pointer"
-                />
+                {/* Selection checkbox (only in select mode) */}
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(item.id)}
+                    className="h-4 w-4 shrink-0 rounded border-border accent-accent cursor-pointer"
+                  />
+                )}
 
                 {/* Status dot */}
                 <div
