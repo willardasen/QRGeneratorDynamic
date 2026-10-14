@@ -63,7 +63,13 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
       }
       setStage("done");
       // Redirect to the destination URL after 2s
-      setTimeout(() => router.push(url), 2000);
+      setTimeout(() => {
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+          window.location.href = url;
+        } else {
+          router.push(url);
+        }
+      }, 2000);
     } catch {
       setError("Terjadi kesalahan jaringan.");
     } finally {

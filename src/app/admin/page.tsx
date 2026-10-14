@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { QRCode } from "@/lib/supabase";
 import CreateForm from "@/components/CreateForm";
 import QRLinkList from "@/components/QRLinkList";
@@ -9,39 +10,82 @@ import BatchGenerator from "@/components/BatchGenerator";
 import QRZipDownload from "@/components/QRZipDownload";
 import type { QRMode } from "@/components/QRZipDownload";
 
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
 interface ToastState {
   message: string;
   type: "success" | "error";
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [items, setItems] = useState<QRCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [tab, setTab] = useState<"create" | "batch">("create");
   const [downloadMode, setDownloadMode] = useState<QRMode>("light");
 
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+  }, []);
+
+  const appUrl =
+    typeof window !== "undefined"
+      ? (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+          ? window.location.origin
+          : (process.env.NEXT_PUBLIC_APP_URL || window.location.origin))
+      : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
+
   const fetchItems = useCallback(async () => {
     try {
       const res = await fetch("/api/qrcodes");
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch {
-      showToast("Failed to load QR codes", "error");
+      showToast("Gagal memuat daftar QR code", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router, showToast]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const res = await fetch("/api/qrcodes");
+        if (res.status === 401) {
+          router.push("/admin/login");
+          return;
+        }
+        const data = await res.json();
+        if (isMounted) {
+          setItems(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (isMounted) {
+          showToast("Gagal memuat daftar QR code", "error");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [router, showToast]);
 
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type });
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/passcode", { method: "DELETE" });
+    } finally {
+      router.push("/admin/login");
+      router.refresh();
+    }
   };
 
   const activeCount = items.filter((i) => !!i.destination_url).length;
@@ -51,18 +95,32 @@ export default function AdminPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6">
       {/* Header */}
-      <div className="animate-fade-in mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-purple-400 shadow-lg shadow-accent/20">
-          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-            />
+      <div className="animate-fade-in mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-purple-400 shadow-lg shadow-accent/20">
+            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">QRFlow</h1>
+            <p className="text-xs text-muted">Dynamic QR · Door-to-Door Edition</p>
+          </div>
+        </div>
+
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-medium text-muted hover:text-danger hover:border-danger/30 transition-all cursor-pointer shadow-sm"
+          title="Keluar dari sesi admin"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">QRFlow</h1>
-          <p className="text-xs text-muted">Dynamic QR · Door-to-Door Edition</p>
-        </div>
+          <span>Keluar</span>
+        </button>
       </div>
 
       {/* Stats Row */}
@@ -156,7 +214,7 @@ export default function AdminPage() {
                 🌙
               </button>
             </div>
-            <QRZipDownload items={items} appUrl={APP_URL} mode={downloadMode} />
+            <QRZipDownload items={items} appUrl={appUrl} mode={downloadMode} />
           </div>
         </div>
       )}
@@ -172,7 +230,7 @@ export default function AdminPage() {
       ) : (
         <QRLinkList
           items={items}
-          appUrl={APP_URL}
+          appUrl={appUrl}
           onUpdated={fetchItems}
           onToast={showToast}
         />

@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
 import MagicActivate from "@/components/MagicActivate";
 
 interface PageProps {
@@ -11,7 +11,8 @@ export default async function QRInactivePage({ params }: PageProps) {
 
   // Check if admin is already logged in (skip passcode step)
   const cookieStore = await cookies();
-  const isAdmin = cookieStore.get("qrflow_admin")?.value === "1";
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const isAdmin = await verifyAdminSessionToken(token);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4">

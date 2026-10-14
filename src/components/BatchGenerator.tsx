@@ -17,6 +17,10 @@ export default function BatchGenerator({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!count || isNaN(count) || count < 1 || count > 500) {
+      onToast("Jumlah QR code harus antara 1 dan 500", "error");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/qrcodes/batch", {
@@ -70,8 +74,8 @@ export default function BatchGenerator({
                 type="number"
                 min={1}
                 max={500}
-                value={count}
-                onChange={(e) => setCount(parseInt(e.target.value, 10))}
+                value={count === 0 ? "" : count}
+                onChange={(e) => setCount(parseInt(e.target.value, 10) || 0)}
                 className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
             </div>

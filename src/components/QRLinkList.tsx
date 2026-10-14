@@ -75,8 +75,6 @@ export default function QRLinkList({
     }
   };
 
-  const clearSelection = () => setSelectedIds(new Set());
-
   const exitSelectMode = () => {
     setSelectMode(false);
     setSelectedIds(new Set());

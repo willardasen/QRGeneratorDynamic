@@ -1,27 +1,49 @@
-import { getSupabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextRequest, NextResponse } from "next/server";
+import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
+import { cookies } from "next/headers";
+
+async function checkAuth(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  return verifyAdminSessionToken(token);
+}
 
 // POST /api/qrcodes/batch
-// Body: { count: number, prefix?: string }
+// Body: { count: number }
 // Creates `count` new QR codes with sequential slugs and NULL destination_url
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const count = parseInt(body.count, 10);
+  const isAuth = await checkAuth();
+  if (!isAuth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  if (!count || count < 1 || count > 500) {
+  let body: { count?: number | string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const count = typeof body.count === "string" ? parseInt(body.count, 10) : Number(body.count);
+
+  if (!count || isNaN(count) || count < 1 || count > 500) {
     return NextResponse.json(
-      { error: "count must be between 1 and 500" },
+      { error: "Count must be an integer between 1 and 500" },
       { status: 400 }
     );
   }
 
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
 
-  // Get the highest existing numeric slug to continue the sequence
-  const { data: existing } = await supabase
+  // Get existing slugs to continue numeric sequence
+  const { data: existing, error: fetchError } = await supabase
     .from("qrcodes")
-    .select("slug")
-    .order("created_at", { ascending: false });
+    .select("slug");
+
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  }
 
   // Find the highest numeric slug value
   let maxNum = 0;
@@ -45,10 +67,9 @@ export async function POST(request: NextRequest) {
     .select();
 
   if (error) {
-    // Might be slug conflict — try with random suffix
     if (error.code === "23505") {
       return NextResponse.json(
-        { error: "Some slugs already exist. Please try again." },
+        { error: "Slug conflict occurred. Please retry." },
         { status: 409 }
       );
     }
