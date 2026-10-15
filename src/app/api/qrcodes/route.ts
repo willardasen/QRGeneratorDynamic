@@ -27,7 +27,14 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  const { getPrintedIds } = await import("@/lib/printed-store");
+  const printedSet = getPrintedIds();
+  const enhancedData = (data || []).map((row) => ({
+    ...row,
+    is_printed: Boolean(row.is_printed) || printedSet.has(row.id),
+  }));
+
+  return NextResponse.json(enhancedData);
 }
 
 // POST /api/qrcodes — create a new QR code

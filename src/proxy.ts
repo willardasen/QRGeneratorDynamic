@@ -41,6 +41,7 @@ export async function proxy(request: NextRequest) {
 
   // For admin web pages: redirect to login page with callbackUrl
   const loginUrl = new URL("/admin/login", request.url);
-  loginUrl.searchParams.set("callbackUrl", pathname);
+  const fullPath = pathname + request.nextUrl.search;
+  loginUrl.searchParams.set("callbackUrl", fullPath);
   return NextResponse.redirect(loginUrl);
 }

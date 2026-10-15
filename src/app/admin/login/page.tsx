@@ -10,7 +10,12 @@ function LoginForm() {
   const [error, setError] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/admin";
+  const rawCallback = searchParams.get("callbackUrl");
+  // Security: Only allow internal relative paths to prevent open redirect phishing
+  const callbackUrl =
+    rawCallback && rawCallback.startsWith("/") && !rawCallback.startsWith("//")
+      ? rawCallback
+      : "/admin";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

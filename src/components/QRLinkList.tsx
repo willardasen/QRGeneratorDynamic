@@ -20,12 +20,13 @@ export default function QRLinkList({
 }: QRLinkListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editUrl, setEditUrl] = useState("");
+  const [editSlug, setEditSlug] = useState("");
   const [saving, setSaving] = useState(false);
   const [qrModalSlug, setQrModalSlug] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; slug: string } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [filter, setFilter] = useState<"all" | "active" | "unassigned">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "printed" | "blank">("all");
   const [search, setSearch] = useState("");
 
   // Selection state
@@ -35,16 +36,24 @@ export default function QRLinkList({
   const [downloadMode, setDownloadMode] = useState<QRMode>("light");
 
   const filtered = items.filter((item) => {
+    const isActive = !!item.destination_url;
+    const isPrinted = !isActive && Boolean(item.is_printed);
+    const isBlank = !isActive && !item.is_printed;
+
     const matchFilter =
       filter === "all"
         ? true
         : filter === "active"
-        ? !!item.destination_url
-        : !item.destination_url;
+        ? isActive
+        : filter === "printed"
+        ? isPrinted
+        : isBlank;
+
     const matchSearch =
       search === "" ||
       item.slug.toLowerCase().includes(search.toLowerCase()) ||
       (item.destination_url ?? "").toLowerCase().includes(search.toLowerCase());
+
     return matchFilter && matchSearch;
   });
 
@@ -86,33 +95,50 @@ export default function QRLinkList({
   const startEdit = (item: QRCode) => {
     setEditingId(item.id);
     setEditUrl(item.destination_url ?? "");
+    setEditSlug(item.slug);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditUrl("");
+    setEditSlug("");
   };
 
   const saveEdit = async (e: FormEvent, id: string) => {
     e.preventDefault();
-    if (!editUrl.trim()) return;
+    if (!editSlug.trim()) {
+      onToast("Slug tidak boleh kosong", "error");
+      return;
+    }
+
+    const trimmedUrl = editUrl.trim();
+    if (trimmedUrl && !trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+      onToast("URL tujuan harus diawali dengan http:// atau https://", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/qrcodes/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination_url: editUrl.trim() }),
+        body: JSON.stringify({
+          slug: editSlug.trim(),
+          destination_url: trimmedUrl || null,
+        }),
       });
+
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
-        onToast(data.error || "Failed to update", "error");
+        onToast(data.error || "Gagal memperbarui QR code", "error");
         return;
       }
-      onToast("Destination updated!", "success");
+
+      onToast("QR code berhasil diperbarui!", "success");
       cancelEdit();
       onUpdated();
     } catch {
-      onToast("Network error", "error");
+      onToast("Terjadi kesalahan jaringan", "error");
     } finally {
       setSaving(false);
     }
@@ -185,6 +211,50 @@ export default function QRLinkList({
     }
   };
 
+  const handleBatchSetPrinted = async (isPrinted: boolean) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      const res = await fetch("/api/qrcodes/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, is_printed: isPrinted }),
+      });
+      if (!res.ok) {
+        onToast("Gagal memperbarui status", "error");
+        return;
+      }
+      onToast(
+        `${ids.length} QR code ditandai sebagai ${isPrinted ? "Sudah Dicetak" : "Belum Dicetak"}`,
+        "success"
+      );
+      onUpdated();
+    } catch {
+      onToast("Terjadi kesalahan jaringan", "error");
+    }
+  };
+
+  const handleTogglePrinted = async (id: string, isPrinted: boolean) => {
+    try {
+      const res = await fetch("/api/qrcodes/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id], is_printed: isPrinted }),
+      });
+      if (!res.ok) {
+        onToast("Gagal memperbarui status", "error");
+        return;
+      }
+      onToast(
+        isPrinted ? "QR code ditandai: Sudah Dicetak" : "QR code ditandai: Belum Dicetak",
+        "success"
+      );
+      onUpdated();
+    } catch {
+      onToast("Terjadi kesalahan jaringan", "error");
+    }
+  };
+
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
@@ -206,30 +276,46 @@ export default function QRLinkList({
           placeholder="Search slug or URL…"
           className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
         />
-        <div className="flex gap-1.5">
-          {(["all", "active", "unassigned"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold capitalize transition-all cursor-pointer ${
-                filter === f
-                  ? f === "active"
-                    ? "bg-success/20 text-success"
-                    : f === "unassigned"
-                    ? "bg-danger/20 text-danger"
-                    : "bg-accent/20 text-accent"
-                  : "bg-surface text-muted hover:bg-surface-hover"
-              }`}
-            >
-              {f} (
-              {f === "all"
+        <div className="flex flex-wrap gap-1.5">
+          {(["all", "active", "printed", "blank"] as const).map((f) => {
+            const count =
+              f === "all"
                 ? items.length
                 : f === "active"
                 ? items.filter((i) => !!i.destination_url).length
-                : items.filter((i) => !i.destination_url).length}
-              )
-            </button>
-          ))}
+                : f === "printed"
+                ? items.filter((i) => !i.destination_url && Boolean(i.is_printed)).length
+                : items.filter((i) => !i.destination_url && !i.is_printed).length;
+            const label =
+              f === "all"
+                ? "All"
+                : f === "active"
+                ? "Active"
+                : f === "printed"
+                ? "🖨️ Printed"
+                : "📄 Blank";
+            const activeStyle =
+              f === "active"
+                ? "bg-success/20 text-success"
+                : f === "printed"
+                ? "bg-amber-500/20 text-amber-400"
+                : f === "blank"
+                ? "bg-surface-hover text-foreground"
+                : "bg-accent/20 text-accent";
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  filter === f
+                    ? activeStyle
+                    : "bg-surface text-muted hover:bg-surface-hover hover:text-foreground"
+                }`}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -294,75 +380,159 @@ export default function QRLinkList({
                 {/* Status dot */}
                 <div
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    isActive ? "bg-success shadow-[0_0_6px_rgba(34,197,94,0.6)]" : "bg-danger shadow-[0_0_6px_rgba(239,68,68,0.6)]"
+                    isActive
+                      ? "bg-success shadow-[0_0_6px_rgba(34,197,94,0.6)]"
+                      : item.is_printed
+                      ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"
+                      : "bg-muted/50"
                   }`}
                 />
 
                 {/* Content */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-foreground">
-                      #{item.slug}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        isActive
-                          ? "bg-success/10 text-success"
-                          : "bg-danger/10 text-danger"
-                      }`}
-                    >
-                      {isActive ? "Active" : "Unassigned"}
-                    </span>
-                    {isActive && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-surface-hover px-2 py-0.5 text-[10px] text-muted">
-                        👆 {item.clicks}
-                      </span>
-                    )}
-                  </div>
-
                   {editingId === item.id ? (
                     <form
                       onSubmit={(e) => saveEdit(e, item.id)}
-                      className="mt-2 flex gap-2"
+                      className="flex flex-col gap-2.5 py-1"
                     >
-                      <input
-                        type="url"
-                        value={editUrl}
-                        onChange={(e) => setEditUrl(e.target.value)}
-                        placeholder="https://..."
-                        className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                        autoFocus
-                        required
-                      />
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="rounded-lg bg-success/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-success active:scale-95 disabled:opacity-50 cursor-pointer"
-                      >
-                        {saving ? "…" : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-hover active:scale-95 cursor-pointer"
-                      >
-                        ✕
-                      </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-accent">✏️ Edit QR Code</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              isActive
+                                ? "bg-success/10 text-success"
+                                : item.is_printed
+                                ? "bg-amber-500/10 text-amber-400"
+                                : "bg-surface-hover text-muted"
+                            }`}
+                          >
+                            {isActive ? "Active" : item.is_printed ? "🖨️ Printed" : "📄 Blank"}
+                          </span>
+                        </div>
+                        {isActive && (
+                          <span className="text-[11px] text-muted">
+                            👆 {item.clicks} clicks
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {/* Slug edit */}
+                        <div>
+                          <label className="mb-1 block text-[11px] font-medium text-muted">
+                            Nama Slug (URL pendek)
+                          </label>
+                          <div className="flex items-center rounded-lg border border-border bg-background px-2.5 py-1.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
+                            <span className="text-xs text-muted select-none mr-1 font-mono">/</span>
+                            <input
+                              type="text"
+                              value={editSlug}
+                              onChange={(e) => setEditSlug(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
+                              placeholder="namaSlug"
+                              required
+                              className="w-full bg-transparent text-sm font-mono text-foreground focus:outline-none"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
+                        {/* Destination URL edit */}
+                        <div>
+                          <label className="mb-1 block text-[11px] font-medium text-muted">
+                            URL Tujuan
+                          </label>
+                          <input
+                            type="url"
+                            value={editUrl}
+                            onChange={(e) => setEditUrl(e.target.value)}
+                            placeholder="https://... (kosongkan jika belum aktif)"
+                            className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-accent-hover active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm shadow-accent/20"
+                        >
+                          {saving ? (
+                            <>
+                              <svg className="h-3 w-3 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              <span>Menyimpan...</span>
+                            </>
+                          ) : (
+                            <span>Simpan Perubahan</span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          disabled={saving}
+                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-hover hover:text-foreground active:scale-95 cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                      </div>
                     </form>
                   ) : (
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {item.destination_url ?? (
-                        <span className="italic text-muted/50">
-                          No destination set
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-foreground">
+                          #{item.slug}
                         </span>
-                      )}
-                    </p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            isActive
+                              ? "bg-success/10 text-success"
+                              : item.is_printed
+                              ? "bg-amber-500/10 text-amber-400"
+                              : "bg-surface-hover text-muted"
+                          }`}
+                        >
+                          {isActive ? "Active" : item.is_printed ? "🖨️ Printed" : "📄 Blank"}
+                        </span>
+                        {isActive && (
+                          <span className="flex items-center gap-0.5 rounded-full bg-surface-hover px-2 py-0.5 text-[10px] text-muted">
+                            👆 {item.clicks}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {item.destination_url ?? (
+                          <span className="italic text-muted/50">
+                            {item.is_printed ? "Printed & ready for door-to-door assignment" : "Blank (not yet printed)"}
+                          </span>
+                        )}
+                      </p>
+                    </>
                   )}
                 </div>
 
                 {/* Action buttons */}
                 {editingId !== item.id && (
                   <div className="flex shrink-0 items-center gap-1">
+                    {/* Quick toggle printed status for unassigned QRs */}
+                    {!isActive && (
+                      <button
+                        onClick={() => handleTogglePrinted(item.id, !item.is_printed)}
+                        title={item.is_printed ? "Tandai sebagai belum dicetak (blank)" : "Tandai sebagai sudah dicetak"}
+                        className={`mr-1 flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all cursor-pointer ${
+                          item.is_printed
+                            ? "border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                            : "border border-border bg-surface-hover text-muted hover:text-foreground hover:border-accent/40"
+                        }`}
+                      >
+                        {item.is_printed ? "🖨️ In Field" : "📄 Blank"}
+                      </button>
+                    )}
                     <button
                       onClick={() => setQrModalSlug(item.slug)}
                       title="View QR Code"
@@ -376,7 +546,7 @@ export default function QRLinkList({
                     </button>
                     <button
                       onClick={() => startEdit(item)}
-                      title="Edit destination"
+                      title="Edit QR Code (Slug & Link)"
                       className="rounded-lg p-2 text-muted transition-colors hover:bg-surface-hover hover:text-accent cursor-pointer"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,6 +615,26 @@ export default function QRLinkList({
                 🌙
               </button>
             </div>
+
+            {/* Mark as Printed */}
+            <button
+              onClick={() => handleBatchSetPrinted(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/20 active:scale-95 cursor-pointer"
+              title="Tandai QR yang dipilih sebagai sudah dicetak (In Field)"
+            >
+              <span>🖨️</span>
+              <span className="hidden sm:inline">Tandai</span> Dicetak
+            </button>
+
+            {/* Mark as Blank */}
+            <button
+              onClick={() => handleBatchSetPrinted(false)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-hover px-2.5 py-1.5 text-xs font-bold text-muted transition-all hover:text-foreground active:scale-95 cursor-pointer"
+              title="Tandai QR yang dipilih sebagai belum dicetak (Blank)"
+            >
+              <span>📄</span>
+              <span className="hidden sm:inline">Tandai</span> Blank
+            </button>
 
             {/* Download selected */}
             <button

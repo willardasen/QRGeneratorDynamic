@@ -89,7 +89,8 @@ export default function AdminPage() {
   };
 
   const activeCount = items.filter((i) => !!i.destination_url).length;
-  const unassignedCount = items.filter((i) => !i.destination_url).length;
+  const printedCount = items.filter((i) => !i.destination_url && Boolean(i.is_printed)).length;
+  const blankCount = items.filter((i) => !i.destination_url && !i.is_printed).length;
   const totalClicks = items.reduce((sum, i) => sum + i.clicks, 0);
 
   return (
@@ -125,18 +126,22 @@ export default function AdminPage() {
 
       {/* Stats Row */}
       {!loading && (
-        <div className="animate-fade-in mb-6 grid grid-cols-3 gap-3">
+        <div className="animate-fade-in mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <div className="rounded-2xl border border-border bg-surface p-3 text-center">
             <p className="text-xl font-bold text-foreground">{items.length}</p>
             <p className="text-[11px] text-muted">Total QRs</p>
           </div>
           <div className="rounded-2xl border border-success/20 bg-success/5 p-3 text-center">
             <p className="text-xl font-bold text-success">{activeCount}</p>
-            <p className="text-[11px] text-success/70">Active</p>
+            <p className="text-[11px] text-success/80">Active</p>
           </div>
-          <div className="rounded-2xl border border-danger/20 bg-danger/5 p-3 text-center">
-            <p className="text-xl font-bold text-danger">{unassignedCount}</p>
-            <p className="text-[11px] text-danger/70">Unassigned</p>
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+            <p className="text-xl font-bold text-amber-400">{printedCount}</p>
+            <p className="text-[11px] text-amber-400/80">🖨️ Printed (In Field)</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-surface/60 p-3 text-center">
+            <p className="text-xl font-bold text-muted">{blankCount}</p>
+            <p className="text-[11px] text-muted">📄 Blank</p>
           </div>
         </div>
       )}

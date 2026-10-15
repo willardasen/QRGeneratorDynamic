@@ -14,12 +14,19 @@ create table if not exists qrcodes (
   created_at      timestamptz   default now() not null
 );
 
+-- Ensure is_printed column exists for door-to-door printed tracking
+alter table qrcodes
+add column if not exists is_printed boolean default false not null;
+
 -- 2. Performance Indexes
 -- Essential for low-latency Edge redirect lookups
 create index if not exists idx_qrcodes_slug on qrcodes (slug);
 
 -- Speeds up admin dashboard queries ordering by creation date
 create index if not exists idx_qrcodes_created_at on qrcodes (created_at desc);
+
+-- Speeds up queries filtering by printed status
+create index if not exists idx_qrcodes_is_printed on qrcodes (is_printed);
 
 -- 3. Row Level Security (RLS) Hardening
 alter table qrcodes enable row level security;
