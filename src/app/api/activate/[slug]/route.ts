@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
 import { isValidDestinationUrl, isValidSlug } from "@/lib/url-validation";
 
@@ -78,6 +79,14 @@ export async function POST(
       { error: error?.message || "QR code tidak ditemukan" },
       { status: 500 }
     );
+  }
+
+  // Invalidate any edge/client cache immediately so test scans redirect correctly
+  revalidatePath(`/qr/${slug}`);
+  revalidatePath(`/qr-inactive/${slug}`);
+  if (new_slug && new_slug !== slug) {
+    revalidatePath(`/qr/${new_slug}`);
+    revalidatePath(`/qr-inactive/${new_slug}`);
   }
 
   return NextResponse.json(data);

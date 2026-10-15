@@ -28,11 +28,11 @@ export default function AdminPage() {
   }, []);
 
   const appUrl =
-    typeof window !== "undefined"
-      ? (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
-          ? window.location.origin
-          : (process.env.NEXT_PUBLIC_APP_URL || window.location.origin))
-      : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
+    process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes("localhost")
+      ? process.env.NEXT_PUBLIC_APP_URL
+      : typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const fetchItems = useCallback(async () => {
     try {

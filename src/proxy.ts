@@ -6,9 +6,8 @@ export const config = {
   matcher: [
     "/admin",
     "/admin/:path*",
-    "/api/qrcodes",
-    "/api/qrcodes/:path*",
-    "/api/activate/:path*",
+    "/api",
+    "/api/:path*",
   ],
 };
 
@@ -22,6 +21,11 @@ export async function proxy(request: NextRequest) {
     if (isAuthenticated) {
       return NextResponse.redirect(new URL("/admin", request.url));
     }
+    return NextResponse.next();
+  }
+
+  // Allow public auth endpoint (passcode login & logout)
+  if (pathname === "/api/auth/passcode") {
     return NextResponse.next();
   }
 

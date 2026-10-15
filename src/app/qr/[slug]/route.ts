@@ -2,9 +2,14 @@ import { getSupabase } from "@/lib/supabase";
 import { NextRequest, NextResponse, after } from "next/server";
 import { isValidDestinationUrl } from "@/lib/url-validation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function createNoCacheRedirect(url: string | URL, status: number = 302): NextResponse {
   const response = NextResponse.redirect(url, status);
-  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  response.headers.set("Cache-Control", "private, no-cache, no-store, max-age=0, must-revalidate");
+  response.headers.set("CDN-Cache-Control", "no-store");
+  response.headers.set("Vercel-CDN-Cache-Control", "no-store");
   response.headers.set("Pragma", "no-cache");
   response.headers.set("Expires", "0");
   return response;
