@@ -2,7 +2,6 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
 import { cookies } from "next/headers";
-import { setPrintedStatus } from "@/lib/printed-store";
 
 async function checkAuth(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -12,7 +11,7 @@ async function checkAuth(): Promise<boolean> {
 
 // PATCH /api/qrcodes/status
 // Body: { ids: string[], is_printed: boolean }
-// Updates the printed/in-use status of QR codes
+// Updates the printed/in-use status of QR codes directly in Supabase
 export async function PATCH(request: NextRequest) {
   const isAuth = await checkAuth();
   if (!isAuth) {
@@ -42,21 +41,17 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // 1. Update persistent local store
-  setPrintedStatus(ids, is_printed);
+  const supabase = getSupabaseAdmin();
+  const { error: dbErr } = await supabase
+    .from("qrcodes")
+    .update({ is_printed })
+    .in("id", ids);
 
-  // 2. Also attempt to update Supabase if the column exists
-  try {
-    const supabase = getSupabaseAdmin();
-    const { error: dbErr } = await supabase
-      .from("qrcodes")
-      .update({ is_printed })
-      .in("id", ids);
-    if (dbErr) {
-      console.warn("Could not sync is_printed to Supabase (migration might not be applied yet):", dbErr.message);
-    }
-  } catch (err) {
-    console.warn("Could not connect to Supabase to sync is_printed:", err);
+  if (dbErr) {
+    return NextResponse.json(
+      { error: `Gagal memperbarui status cetak: ${dbErr.message}` },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({

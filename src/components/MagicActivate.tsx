@@ -15,7 +15,6 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
 
   const [passcode, setPasscode] = useState("");
   const [url, setUrl] = useState("");
-  const [newSlug, setNewSlug] = useState(slug);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -47,14 +46,10 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
     setLoading(true);
     setError("");
     try {
-      const body: Record<string, string> = { destination_url: url };
-      if (newSlug && newSlug !== slug) {
-        body.new_slug = newSlug;
-      }
       const res = await fetch(`/api/activate/${slug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ destination_url: url.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,36 +85,15 @@ export default function MagicActivate({ slug, isAdminLoggedIn }: MagicActivatePr
   if (stage === "activate") {
     return (
       <div className="mt-8 rounded-2xl border border-accent/30 bg-accent/10 p-6">
-        <p className="mb-4 text-sm font-semibold text-accent">
-          🔗 Aktifkan QR <span className="font-mono">/{slug}</span>
-        </p>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-sm font-semibold text-accent">
+            🔗 Aktifkan QR Code
+          </p>
+          <span className="font-mono text-xs font-bold text-foreground bg-surface px-2.5 py-1 rounded-lg border border-border">
+            #{slug}
+          </span>
+        </div>
         <form onSubmit={handleActivate} className="flex flex-col gap-3" suppressHydrationWarning>
-
-          {/* Slug rename field */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted">
-              Nama Slug (URL pendek)
-            </label>
-            <div className="flex items-center rounded-xl border border-border bg-background overflow-hidden focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
-              <span className="pl-3 pr-1 text-sm text-muted select-none">/</span>
-              <input
-                type="text"
-                value={newSlug}
-                onChange={(e) => setNewSlug(e.target.value.replace(/[^a-zA-Z0-9-]/g, ""))}
-                placeholder="namaToko"
-                required
-                className="flex-1 bg-transparent py-3 pr-4 text-sm text-foreground placeholder:text-muted focus:outline-none"
-                suppressHydrationWarning
-              />
-            </div>
-            {newSlug !== slug && newSlug && (
-              <p className="text-xs text-accent/80">
-                Slug diubah: <span className="font-mono text-muted">/{slug}</span> →{" "}
-                <span className="font-mono text-accent">/{newSlug}</span>
-              </p>
-            )}
-          </div>
-
           {/* Destination URL field */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted">

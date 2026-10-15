@@ -27,11 +27,9 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { getPrintedIds } = await import("@/lib/printed-store");
-  const printedSet = getPrintedIds();
   const enhancedData = (data || []).map((row) => ({
     ...row,
-    is_printed: Boolean(row.is_printed) || printedSet.has(row.id),
+    is_printed: Boolean(row.is_printed),
   }));
 
   return NextResponse.json(enhancedData);

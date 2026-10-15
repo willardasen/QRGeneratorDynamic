@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import type { QRCode } from "@/lib/supabase";
 import QRCodeDownloader from "./QRCodeDownloader";
 import type { QRMode } from "./QRZipDownload";
+import { renderQRToPNG } from "@/lib/qr-image";
 
 interface QRLinkListProps {
   items: QRCode[];
@@ -20,7 +21,6 @@ export default function QRLinkList({
 }: QRLinkListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editUrl, setEditUrl] = useState("");
-  const [editSlug, setEditSlug] = useState("");
   const [saving, setSaving] = useState(false);
   const [qrModalSlug, setQrModalSlug] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -95,22 +95,15 @@ export default function QRLinkList({
   const startEdit = (item: QRCode) => {
     setEditingId(item.id);
     setEditUrl(item.destination_url ?? "");
-    setEditSlug(item.slug);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditUrl("");
-    setEditSlug("");
   };
 
   const saveEdit = async (e: FormEvent, id: string) => {
     e.preventDefault();
-    if (!editSlug.trim()) {
-      onToast("Slug tidak boleh kosong", "error");
-      return;
-    }
-
     const trimmedUrl = editUrl.trim();
     if (trimmedUrl && !trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
       onToast("URL tujuan harus diawali dengan http:// atau https://", "error");
@@ -123,7 +116,6 @@ export default function QRLinkList({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug: editSlug.trim(),
           destination_url: trimmedUrl || null,
         }),
       });
@@ -134,7 +126,7 @@ export default function QRLinkList({
         return;
       }
 
-      onToast("QR code berhasil diperbarui!", "success");
+      onToast("URL tujuan berhasil diperbarui!", "success");
       cancelEdit();
       onUpdated();
     } catch {
@@ -168,13 +160,17 @@ export default function QRLinkList({
   const executeBulkDelete = async () => {
     setConfirmBulkDelete(false);
     const toDelete = [...selectedIds];
-    let deleted = 0;
-    for (const id of toDelete) {
-      try {
-        const res = await fetch(`/api/qrcodes/${id}`, { method: "DELETE" });
-        if (res.ok) deleted++;
-      } catch { /* skip */ }
-    }
+    const results = await Promise.all(
+      toDelete.map(async (id) => {
+        try {
+          const res = await fetch(`/api/qrcodes/${id}`, { method: "DELETE" });
+          return res.ok;
+        } catch {
+          return false;
+        }
+      })
+    );
+    const deleted = results.filter(Boolean).length;
     onToast(`${deleted} QR code${deleted !== 1 ? "s" : ""} deleted`, "success");
     setSelectedIds(new Set());
     onUpdated();
@@ -397,7 +393,9 @@ export default function QRLinkList({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-accent">✏️ Edit QR Code</span>
+                          <span className="font-mono text-sm font-bold text-foreground">
+                            #{item.slug}
+                          </span>
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                               isActive
@@ -417,39 +415,18 @@ export default function QRLinkList({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {/* Slug edit */}
-                        <div>
-                          <label className="mb-1 block text-[11px] font-medium text-muted">
-                            Nama Slug (URL pendek)
-                          </label>
-                          <div className="flex items-center rounded-lg border border-border bg-background px-2.5 py-1.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
-                            <span className="text-xs text-muted select-none mr-1 font-mono">/</span>
-                            <input
-                              type="text"
-                              value={editSlug}
-                              onChange={(e) => setEditSlug(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
-                              placeholder="namaSlug"
-                              required
-                              className="w-full bg-transparent text-sm font-mono text-foreground focus:outline-none"
-                              autoFocus
-                            />
-                          </div>
-                        </div>
-
-                        {/* Destination URL edit */}
-                        <div>
-                          <label className="mb-1 block text-[11px] font-medium text-muted">
-                            URL Tujuan
-                          </label>
-                          <input
-                            type="url"
-                            value={editUrl}
-                            onChange={(e) => setEditUrl(e.target.value)}
-                            placeholder="https://... (kosongkan jika belum aktif)"
-                            className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                          />
-                        </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-muted">
+                          URL Tujuan
+                        </label>
+                        <input
+                          type="url"
+                          value={editUrl}
+                          onChange={(e) => setEditUrl(e.target.value)}
+                          placeholder="https://... (kosongkan jika belum diarahkan)"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          autoFocus
+                        />
                       </div>
 
                       {/* Action buttons */}
@@ -468,7 +445,7 @@ export default function QRLinkList({
                               <span>Menyimpan...</span>
                             </>
                           ) : (
-                            <span>Simpan Perubahan</span>
+                            <span>Simpan URL</span>
                           )}
                         </button>
                         <button
@@ -768,32 +745,4 @@ export default function QRLinkList({
       )}
     </>
   );
-}
-
-// Helper: render a QR code to PNG data URL
-async function renderQRToPNG(
-  value: string,
-  fgColor: string,
-  bgColor: string
-): Promise<string> {
-  return new Promise((resolve) => {
-    const size = 300;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, size, size);
-
-    import("qrcode").then((QRCode) => {
-      QRCode.toCanvas(canvas, value, {
-        width: size,
-        margin: 2,
-        color: { dark: fgColor, light: bgColor },
-      }).then(() => {
-        resolve(canvas.toDataURL("image/png"));
-      });
-    });
-  });
 }

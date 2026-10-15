@@ -65,7 +65,7 @@ export default function CreateForm({ onCreated, onToast }: CreateFormProps) {
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="my-link"
-              pattern="[a-zA-Z0-9\-]+"
+              pattern="[a-zA-Z0-9_\-]+"
               required
               className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted transition-colors focus:border-accent"
             />

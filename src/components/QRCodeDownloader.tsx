@@ -1,7 +1,9 @@
 "use client";
 
 import { QRCodeCanvas } from "qrcode.react";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
+
+import { renderQRToPNG } from "@/lib/qr-image";
 
 interface QRCodeDownloaderProps {
   url: string;
@@ -9,26 +11,27 @@ interface QRCodeDownloaderProps {
 }
 
 export default function QRCodeDownloader({ url, slug }: QRCodeDownloaderProps) {
-  const lightRef = useRef<HTMLDivElement>(null);
-  const darkRef = useRef<HTMLDivElement>(null);
-
   const handleDownload = useCallback(
-    (ref: React.RefObject<HTMLDivElement | null>, suffix: string) => {
-      const canvas = ref.current?.querySelector("canvas");
-      if (!canvas) return;
-
-      const link = document.createElement("a");
-      link.download = `qr-${slug}-${suffix}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
+    async (suffix: "light" | "dark") => {
+      const fgColor = suffix === "light" ? "#09090b" : "#ffffff";
+      const bgColor = suffix === "light" ? "#ffffff" : "#09090b";
+      try {
+        const pngDataUrl = await renderQRToPNG(url, fgColor, bgColor, 1024);
+        const link = document.createElement("a");
+        link.download = `qr-${slug}-${suffix}.png`;
+        link.href = pngDataUrl;
+        link.click();
+      } catch (err) {
+        console.error("Failed to generate QR download:", err);
+      }
     },
-    [slug]
+    [slug, url]
   );
 
-  const handleDownloadBoth = useCallback(() => {
-    handleDownload(lightRef, "light");
+  const handleDownloadBoth = useCallback(async () => {
+    await handleDownload("light");
     // Small delay so browser doesn't skip the second download
-    setTimeout(() => handleDownload(darkRef, "dark"), 150);
+    setTimeout(() => handleDownload("dark"), 150);
   }, [handleDownload]);
 
   return (
@@ -37,10 +40,7 @@ export default function QRCodeDownloader({ url, slug }: QRCodeDownloaderProps) {
       <div className="flex items-center gap-4">
         {/* Light variant */}
         <div className="flex flex-col items-center gap-2">
-          <div
-            ref={lightRef}
-            className="rounded-xl bg-white p-3 shadow-lg shadow-accent/10"
-          >
+          <div className="rounded-xl bg-white p-3 shadow-lg shadow-accent/10">
             <QRCodeCanvas
               value={url}
               size={140}
@@ -51,7 +51,7 @@ export default function QRCodeDownloader({ url, slug }: QRCodeDownloaderProps) {
             />
           </div>
           <button
-            onClick={() => handleDownload(lightRef, "light")}
+            onClick={() => handleDownload("light")}
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-all hover:border-accent/50 hover:text-accent active:scale-95 cursor-pointer"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,10 +64,7 @@ export default function QRCodeDownloader({ url, slug }: QRCodeDownloaderProps) {
 
         {/* Dark variant */}
         <div className="flex flex-col items-center gap-2">
-          <div
-            ref={darkRef}
-            className="rounded-xl bg-[#09090b] p-3 shadow-lg shadow-accent/10"
-          >
+          <div className="rounded-xl bg-[#09090b] p-3 shadow-lg shadow-accent/10">
             <QRCodeCanvas
               value={url}
               size={140}
@@ -78,7 +75,7 @@ export default function QRCodeDownloader({ url, slug }: QRCodeDownloaderProps) {
             />
           </div>
           <button
-            onClick={() => handleDownload(darkRef, "dark")}
+            onClick={() => handleDownload("dark")}
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-all hover:border-accent/50 hover:text-accent active:scale-95 cursor-pointer"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

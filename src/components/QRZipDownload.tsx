@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { QRCode } from "@/lib/supabase";
+import { renderQRToPNG } from "@/lib/qr-image";
 
 export type QRMode = "light" | "dark";
 
@@ -23,17 +24,12 @@ export default function QRZipDownload({ items, appUrl, mode, label }: QRZipDownl
     setLoading(true);
 
     try {
-      // Dynamically import heavy libs only when needed
-      const [, JSZip] = await Promise.all([
-        import("qrcode.react"),
-        import("jszip").then((m) => m.default),
-      ]);
-
+      const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
       for (const item of items) {
         const url = `${appUrl}/qr/${item.slug}`;
-        const png = await renderQRToPNG(url, fgColor, bgColor);
+        const png = await renderQRToPNG(url, fgColor, bgColor, 1024);
         zip.file(`qr-${item.slug}-${mode}.png`, png.split(",")[1], { base64: true });
       }
 
@@ -71,32 +67,4 @@ export default function QRZipDownload({ items, appUrl, mode, label }: QRZipDownl
       {loading ? "Packing…" : (label ?? `Download All (${items.length})`)}
     </button>
   );
-}
-
-// Helper: render a QR code value to a PNG data URL using an off-screen canvas
-async function renderQRToPNG(
-  value: string,
-  fgColor: string,
-  bgColor: string
-): Promise<string> {
-  return new Promise((resolve) => {
-    const size = 300;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, size, size);
-
-    import("qrcode").then((QRCode) => {
-      QRCode.toCanvas(canvas, value, {
-        width: size,
-        margin: 2,
-        color: { dark: fgColor, light: bgColor },
-      }).then(() => {
-        resolve(canvas.toDataURL("image/png"));
-      });
-    });
-  });
 }

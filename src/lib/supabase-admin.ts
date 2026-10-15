@@ -4,33 +4,25 @@ let _supabaseAdmin: SupabaseClient | null = null;
 
 /**
  * Returns a server-side Supabase client with administrative / service-role capabilities.
- * Uses SUPABASE_SERVICE_ROLE_KEY when available to bypass RLS in production.
- * Falls back to NEXT_PUBLIC_SUPABASE_ANON_KEY if service key is not configured.
+ * Strictly requires SUPABASE_SERVICE_ROLE_KEY to bypass Row Level Security.
+ * Never falls back to the public anonymous key.
  */
 export function getSupabaseAdmin(): SupabaseClient {
   if (!_supabaseAdmin) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!url) {
       throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL in environment variables.");
     }
 
-    const key = serviceKey || anonKey;
-    if (!key) {
+    if (!serviceKey) {
       throw new Error(
-        "Missing SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables."
+        "Missing SUPABASE_SERVICE_ROLE_KEY in environment variables. Backend admin operations strictly require the service_role secret key."
       );
     }
 
-    if (!serviceKey && process.env.NODE_ENV === "production") {
-      console.warn(
-        "⚠️ WARNING: SUPABASE_SERVICE_ROLE_KEY is not set in production. Using ANON key. Ensure Supabase RLS is configured appropriately."
-      );
-    }
-
-    _supabaseAdmin = createClient(url, key, {
+    _supabaseAdmin = createClient(url, serviceKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,

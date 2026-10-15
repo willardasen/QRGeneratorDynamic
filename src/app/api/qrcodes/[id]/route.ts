@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextRequest, NextResponse } from "next/server";
-import { isValidDestinationUrl, isValidSlug } from "@/lib/url-validation";
+import { revalidatePath } from "next/cache";
+import { isValidDestinationUrl } from "@/lib/url-validation";
 import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
@@ -10,7 +11,7 @@ async function checkAuth(): Promise<boolean> {
   return verifyAdminSessionToken(token);
 }
 
-// PATCH /api/qrcodes/[id] — update slug and/or destination_url
+// PATCH /api/qrcodes/[id] — update destination_url only (slug is permanent)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,66 +23,42 @@ export async function PATCH(
 
   const { id } = await params;
 
-  let body: { destination_url?: string | null; slug?: string };
+  let body: { destination_url?: string | null };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { destination_url, slug } = body;
+  const { destination_url } = body;
 
-  if (destination_url === undefined && slug === undefined) {
+  const trimmedUrl = destination_url ? destination_url.trim() : null;
+  if (trimmedUrl !== null && !isValidDestinationUrl(trimmedUrl)) {
     return NextResponse.json(
-      { error: "Setidaknya slug atau destination_url harus diberikan" },
+      { error: "URL tujuan harus valid dan diawali dengan http:// atau https://" },
       { status: 400 }
     );
-  }
-
-  const updatePayload: Record<string, string | null> = {};
-
-  if (slug !== undefined) {
-    const trimmedSlug = slug.trim();
-    if (!isValidSlug(trimmedSlug)) {
-      return NextResponse.json(
-        { error: "Slug hanya boleh berisi huruf, angka, tanda hubung (-), dan garis bawah (_)" },
-        { status: 400 }
-      );
-    }
-    updatePayload.slug = trimmedSlug;
-  }
-
-  if (destination_url !== undefined) {
-    const trimmedUrl = destination_url ? destination_url.trim() : null;
-    if (trimmedUrl !== null && !isValidDestinationUrl(trimmedUrl)) {
-      return NextResponse.json(
-        { error: "URL tujuan harus valid dan diawali dengan http:// atau https://" },
-        { status: 400 }
-      );
-    }
-    updatePayload.destination_url = trimmedUrl;
   }
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("qrcodes")
-    .update(updatePayload)
+    .update({ destination_url: trimmedUrl })
     .eq("id", id)
     .select()
     .single();
 
   if (error) {
-    if (error.code === "23505") {
-      return NextResponse.json(
-        { error: "Slug ini sudah digunakan oleh QR code lain" },
-        { status: 409 }
-      );
-    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   if (!data) {
     return NextResponse.json({ error: "QR code tidak ditemukan" }, { status: 404 });
+  }
+
+  if (data.slug) {
+    revalidatePath(`/qr/${data.slug}`);
+    revalidatePath(`/qr-inactive/${data.slug}`);
   }
 
   return NextResponse.json(data);
@@ -100,14 +77,21 @@ export async function DELETE(
   const { id } = await params;
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("qrcodes").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("qrcodes")
+    .delete()
+    .eq("id", id)
+    .select("slug")
+    .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { removePrintedIds } = await import("@/lib/printed-store");
-  removePrintedIds([id]);
+  if (data?.slug) {
+    revalidatePath(`/qr/${data.slug}`);
+    revalidatePath(`/qr-inactive/${data.slug}`);
+  }
 
   return NextResponse.json({ success: true });
 }

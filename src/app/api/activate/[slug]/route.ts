@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
-import { isValidDestinationUrl, isValidSlug } from "@/lib/url-validation";
+import { isValidDestinationUrl } from "@/lib/url-validation";
 
 // POST /api/activate/[slug]
 // Activates an unassigned QR code by setting its destination_url
-// Optionally renames the slug via new_slug in the body
+// and automatically sets is_printed: true
 // Requires admin session
 export async function POST(
   request: NextRequest,
@@ -24,14 +24,14 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { destination_url?: string; new_slug?: string };
+  let body: { destination_url?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { destination_url, new_slug } = body;
+  const { destination_url } = body;
 
   if (!isValidDestinationUrl(destination_url)) {
     return NextResponse.json(
@@ -40,41 +40,20 @@ export async function POST(
     );
   }
 
-  // Validate new_slug if provided
-  if (new_slug !== undefined && new_slug !== slug) {
-    if (!isValidSlug(new_slug)) {
-      return NextResponse.json(
-        { error: "Slug hanya boleh berisi huruf, angka, tanda hubung (-), dan garis bawah (_)" },
-        { status: 400 }
-      );
-    }
-  }
-
   const supabase = getSupabaseAdmin();
 
-  // Build the update payload
-  const updatePayload: Record<string, string> = {
-    destination_url: destination_url!.trim(),
-  };
-  if (new_slug && new_slug !== slug) {
-    updatePayload.slug = new_slug.trim();
-  }
-
+  // Destination URL is activated and is_printed is marked true
   const { data, error } = await supabase
     .from("qrcodes")
-    .update(updatePayload)
+    .update({
+      destination_url: destination_url!.trim(),
+      is_printed: true,
+    })
     .eq("slug", slug)
     .select()
     .single();
 
   if (error || !data) {
-    // Unique constraint violation on slug
-    if (error?.code === "23505") {
-      return NextResponse.json(
-        { error: "Slug ini sudah digunakan oleh QR code lain" },
-        { status: 409 }
-      );
-    }
     return NextResponse.json(
       { error: error?.message || "QR code tidak ditemukan" },
       { status: 500 }
@@ -84,10 +63,6 @@ export async function POST(
   // Invalidate any edge/client cache immediately so test scans redirect correctly
   revalidatePath(`/qr/${slug}`);
   revalidatePath(`/qr-inactive/${slug}`);
-  if (new_slug && new_slug !== slug) {
-    revalidatePath(`/qr/${new_slug}`);
-    revalidatePath(`/qr-inactive/${new_slug}`);
-  }
 
   return NextResponse.json(data);
 }
