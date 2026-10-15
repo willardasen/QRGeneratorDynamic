@@ -3,9 +3,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export type QRCode = {
   id: string;
   slug: string;
-  destination_url: string;
+  destination_url: string | null;
   clicks: number;
   created_at: string;
+  is_printed?: boolean;
 };
 
 let _supabase: SupabaseClient | null = null;
